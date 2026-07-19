@@ -1,0 +1,47 @@
+Build a To-Do CRUD API using Python FastAPI.
+
+Requirements:
+
+1. Use FastAPI.
+2. Store data only in memory using a Python list.
+3. Create these endpoints:
+
+GET /
+- Return API name, version, and available endpoints.
+
+GET /health
+- Return server health status.
+
+GET /tasks
+- Return all tasks.
+
+GET /tasks/{id}
+- Return one task.
+- If task does not exist, return 404 JSON error.
+
+POST /tasks
+- Accept JSON:
+{
+"title": "task name"
+}
+
+- Create a new task.
+- Automatically generate id.
+- Set done=false.
+- Return status code 201.
+- Validate empty or missing title and return 400.
+
+PUT /tasks/{id}
+- Update title and done fields.
+- Unknown id should return 404.
+- Invalid input should return 400.
+
+DELETE /tasks/{id}
+- Delete task.
+- Return status code 204.
+- Unknown id should return 404.
+
+Also:
+- Add Swagger documentation.
+- Follow FastAPI best practices.
+- Keep code simple for beginners.
