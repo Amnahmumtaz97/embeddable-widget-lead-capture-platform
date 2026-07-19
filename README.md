@@ -1,30 +1,20 @@
 # Task API
 
-FastAPI CRUD API.
+A simple CRUD To-Do API built with **FastAPI**.
 
-## Run
+This project allows users to:
+- Create tasks
+- Read tasks
+- Update tasks
+- Delete tasks
 
-Install:
+The data is stored **in memory** (no database is used).
 
-pip install -r requirements.txt
+---
 
+## Installation & Run
 
-Start:
+Clone the repository:
 
-uvicorn main:app --reload
-
-
-## Endpoints
-
-|Method|URL|
-|-|-|
-|GET|/tasks|
-|GET|/tasks/{id}|
-|POST|/tasks|
-|PUT|/tasks/{id}|
-|DELETE|/tasks/{id}|
-
-
-Swagger:
-
-http://localhost:8000/docs
+```bash
+git clone https://github.com/Amnahmumtaz97/flyrank-todo-api.git
