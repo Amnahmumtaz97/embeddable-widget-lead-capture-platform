@@ -24,17 +24,19 @@ from pydantic import BaseModel
 app = FastAPI()
 class TaskCreate(BaseModel):
     title:str
-
+class TaskUpdate(BaseModel):
+    title:str
+    done:bool
+    
 @app.get("/")
 def home():
     return {
-        "name":"Task API",
-        "version":"1.0",
-        "endpoints":[
+        "name": "Task API",
+        "version": "1.0",
+        "endpoints": [
             "/tasks"
         ]
     }
-
 
 @app.get("/health")
 def health():
@@ -79,3 +81,38 @@ def create_task(task:TaskCreate):
     tasks.append(new_task)
 
     return new_task
+
+@app.put("/tasks/{id}")
+def update_task(id:int,data:TaskUpdate):
+
+    for task in tasks:
+
+        if task["id"]==id:
+
+            task["title"]=data.title
+            task["done"]=data.done
+
+            return task
+
+
+    raise HTTPException(
+        status_code=404,
+        detail="Task not found"
+    )
+    
+@app.delete("/tasks/{id}",status_code=204)
+def delete_task(id:int):
+
+    for task in tasks:
+
+        if task["id"]==id:
+
+            tasks.remove(task)
+
+            return
+
+
+    raise HTTPException(
+        status_code=404,
+        detail="Task not found"
+    )
