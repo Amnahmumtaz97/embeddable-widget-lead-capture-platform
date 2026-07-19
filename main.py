@@ -4,4 +4,4 @@ app = FastAPI()
 
 @app.get("/")
 def hello():
-    return {"message": "Hello from Task API"}
+    return {"message": "Hello from Task API "}
