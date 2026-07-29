@@ -33,7 +33,9 @@ This query returns only the completed tasks from the `tasks` table.
 
 ## Database viewer screenshot
 
-Add a screenshot here after opening `tasks.db` in DB Browser for SQLite.
+![Tasks table in DB Browser](docs/tasks-db.png)
+
+The screenshot shows the `tasks` table in DB Browser for SQLite with the three seeded rows.
 
 ## API
 
