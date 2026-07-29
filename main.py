@@ -106,14 +106,24 @@ def health():
     
 @app.get("/tasks")
 def get_tasks():
-    return tasks
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            "SELECT id, title, done FROM tasks ORDER BY id"
+        ).fetchall()
+
+    return [task_to_dict(row) for row in rows]
 
 
 @app.get("/tasks/{id}")
 def get_task(id:int):
-    for task in tasks:
-        if task["id"] == id:
-            return task
+    with get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT id, title, done FROM tasks WHERE id = ?",
+            (id,),
+        ).fetchone()
+
+    if row is not None:
+        return task_to_dict(row)
 
     raise HTTPException(
         status_code=404,
