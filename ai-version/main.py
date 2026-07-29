@@ -1,35 +1,45 @@
+import sqlite3
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-
-app = FastAPI(
-    title="Task API",
-    version="1.0",
-    description="A simple CRUD To-Do API built with FastAPI"
-)
+app = FastAPI()
+DB_PATH = Path(__file__).with_name("tasks.db")
 
 
-# In-memory database
-tasks = [
-    {
-        "id": 1,
-        "title": "Learn FastAPI",
-        "done": False
-    },
-    {
-        "id": 2,
-        "title": "Build API",
-        "done": False
-    },
-    {
-        "id": 3,
-        "title": "Upload Github",
-        "done": True
-    }
-]
+def get_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
-# Request models
+def init_db():
+    conn = get_connection()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            done INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.executemany(
+        "INSERT INTO tasks (title, done) VALUES (?, ?)",
+        [
+            ("Learn FastAPI", 0),
+            ("Build API", 0),
+            ("Upload Github", 1),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+
 class TaskCreate(BaseModel):
     title: str
 
@@ -39,125 +49,76 @@ class TaskUpdate(BaseModel):
     done: bool
 
 
-# Root endpoint
-@app.get("/")
-def root():
-    return {
-        "name": "Task API",
-        "version": "1.0",
-        "endpoints": [
-            "/tasks",
-            "/tasks/{id}"
-        ]
-    }
+def row_to_task(row):
+    return {"id": row["id"], "title": row["title"], "done": bool(row["done"])}
 
 
-# Health endpoint
-@app.get("/health")
-def health():
-    return {
-        "status": "ok"
-    }
-
-
-# Get all tasks
 @app.get("/tasks")
-def get_tasks():
-    return tasks
+def list_tasks():
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM tasks").fetchall()
+    conn.close()
+    return [row_to_task(row) for row in rows]
 
 
-# Get single task
-@app.get("/tasks/{id}")
-def get_task(id: int):
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int):
+    conn = get_connection()
+    row = conn.execute(f"SELECT * FROM tasks WHERE id = {task_id}").fetchone()
+    conn.close()
 
-    for task in tasks:
-        if task["id"] == id:
-            return task
+    if row is None:
+        raise HTTPException(status_code=404, detail={"error": f"Task {task_id} not found"})
 
-    raise HTTPException(
-        status_code=404,
-        detail={
-            "error": f"Task {id} not found"
-        }
-    )
+    return row_to_task(row)
 
 
-# Create task
 @app.post("/tasks", status_code=201)
 def create_task(task: TaskCreate):
-
     if not task.title.strip():
+        raise HTTPException(status_code=400, detail={"error": "Title cannot be empty"})
 
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "Title cannot be empty"
-            }
-        )
-
-
-    new_task = {
-        "id": len(tasks) + 1,
-        "title": task.title,
-        "done": False
-    }
-
-
-    tasks.append(new_task)
-
-    return new_task
-
-
-
-# Update task
-@app.put("/tasks/{id}")
-def update_task(id: int, updated_task: TaskUpdate):
-
-    for task in tasks:
-
-        if task["id"] == id:
-
-            if not updated_task.title.strip():
-
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "error": "Title cannot be empty"
-                    }
-                )
-
-
-            task["title"] = updated_task.title
-            task["done"] = updated_task.done
-
-            return task
-
-
-    raise HTTPException(
-        status_code=404,
-        detail={
-            "error": f"Task {id} not found"
-        }
+    conn = get_connection()
+    cursor = conn.execute(
+        "INSERT INTO tasks (title, done) VALUES (?, ?)",
+        (task.title, 0),
     )
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM tasks WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    conn.close()
+    return row_to_task(row)
 
 
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, task: TaskUpdate):
+    if not task.title.strip():
+        raise HTTPException(status_code=400, detail={"error": "Title cannot be empty"})
 
-# Delete task
-@app.delete("/tasks/{id}", status_code=204)
-def delete_task(id: int):
-
-    for task in tasks:
-
-        if task["id"] == id:
-
-            tasks.remove(task)
-
-            return None
-
-
-    raise HTTPException(
-        status_code=404,
-        detail={
-            "error": f"Task {id} not found"
-        }
+    conn = get_connection()
+    cursor = conn.execute(
+        "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
+        (task.title, int(task.done), task_id),
     )
+    conn.commit()
+
+    if cursor.rowcount == 0:
+        conn.close()
+        raise HTTPException(status_code=404, detail={"error": f"Task {task_id} not found"})
+
+    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    conn.close()
+    return row_to_task(row)
+
+
+@app.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: int):
+    conn = get_connection()
+    cursor = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail={"error": f"Task {task_id} not found"})

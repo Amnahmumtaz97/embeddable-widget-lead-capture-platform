@@ -1,47 +1,16 @@
-Build a To-Do CRUD API using Python FastAPI.
+Migrate my Python FastAPI in-memory task CRUD API to SQLite.
 
 Requirements:
-
-1. Use FastAPI.
-2. Store data only in memory using a Python list.
-3. Create these endpoints:
-
-GET /
-- Return API name, version, and available endpoints.
-
-GET /health
-- Return server health status.
-
-GET /tasks
-- Return all tasks.
-
-GET /tasks/{id}
-- Return one task.
-- If task does not exist, return 404 JSON error.
-
-POST /tasks
-- Accept JSON:
-{
-"title": "task name"
-}
-
-- Create a new task.
-- Automatically generate id.
-- Set done=false.
-- Return status code 201.
-- Validate empty or missing title and return 400.
-
-PUT /tasks/{id}
-- Update title and done fields.
-- Unknown id should return 404.
-- Invalid input should return 400.
-
-DELETE /tasks/{id}
-- Delete task.
-- Return status code 204.
-- Unknown id should return 404.
-
-Also:
-- Add Swagger documentation.
-- Follow FastAPI best practices.
-- Keep code simple for beginners.
+- Use Python 3.10+ with FastAPI and the built-in sqlite3 module.
+- Store data in a file named tasks.db next to the app.
+- Create a tasks table if it does not exist with columns: id (integer primary key), title (text), done (boolean stored as 0/1).
+- On startup, insert three example tasks only when the table is empty.
+- Keep these endpoints with the same behaviour as before:
+  - GET /tasks
+  - GET /tasks/{id}
+  - POST /tasks
+  - PUT /tasks/{id}
+  - DELETE /tasks/{id}
+- POST returns 201, DELETE returns 204, invalid body returns 400, unknown id returns 404.
+- Use parameterized SQL queries with ? placeholders for user input.
+- Return JSON errors in the shape {"error": "..."}.
