@@ -11,24 +11,6 @@ app = FastAPI()
 
 DATABASE_PATH = Path(__file__).with_name("tasks.db")
 
-tasks = [
-    {
-        "id": 1,
-        "title": "Learn FastAPI",
-        "done": False,
-    },
-    {
-        "id": 2,
-        "title": "Build API",
-        "done": False,
-    },
-    {
-        "id": 3,
-        "title": "Upload Github",
-        "done": True,
-    },
-]
-
 
 def get_db_connection():
     connection = sqlite3.connect(DATABASE_PATH)
@@ -161,34 +143,35 @@ def update_task(id:int,data:TaskUpdate):
             detail={"error": "Title cannot be empty"}
         )
 
-    for task in tasks:
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
+            (data.title, int(data.done), id),
+        )
 
-        if task["id"] == id:
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "Task not found"}
+            )
 
-            task["title"] = data.title
-            task["done"] = data.done
+        updated_task = connection.execute(
+            "SELECT id, title, done FROM tasks WHERE id = ?",
+            (id,),
+        ).fetchone()
 
-            return task
-
-
-    raise HTTPException(
-        status_code=404,
-        detail={"error": "Task not found"}
-    )
+    return task_to_dict(updated_task)
     
 @app.delete("/tasks/{id}",status_code=204)
 def delete_task(id:int):
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            "DELETE FROM tasks WHERE id = ?",
+            (id,),
+        )
 
-    for task in tasks:
-
-        if task["id"] == id:
-
-            tasks.remove(task)
-
-            return
-
-
-    raise HTTPException(
-        status_code=404,
-        detail={"error": "Task not found"}
-    )
+    if cursor.rowcount == 0:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Task not found"}
+        )
