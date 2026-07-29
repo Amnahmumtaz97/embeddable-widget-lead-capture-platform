@@ -1,20 +1,44 @@
 # Task API
 
-A simple CRUD To-Do API built with **FastAPI**.
+A simple CRUD to-do API built with **FastAPI** and **SQLite**.
 
-This project allows users to:
-- Create tasks
-- Read tasks
-- Update tasks
-- Delete tasks
+This version keeps the same API as the in-memory assignment, but task data now lives in a database file so it survives restarts.
 
-The data is stored **in memory** (no database is used).
+## Why SQLite
 
----
+SQLite was a good fit for this assignment because it is lightweight, requires no separate server, and creates a single `tasks.db` file automatically when the app starts.
 
-## Installation & Run
+## Where the database lives
 
-Clone the repository:
+The database file is stored next to `main.py` as `tasks.db`.
+
+## How to run
 
 ```bash
-git clone https://github.com/Amnahmumtaz97/flyrank-todo-api.git
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+The app creates `tasks.db` and the `tasks` table automatically on first run, then inserts three sample tasks only when the table is empty. The database file is git-ignored so each fresh clone can create its own local copy.
+
+## Example SQL
+
+```sql
+SELECT * FROM tasks WHERE done = 1;
+```
+
+This query returns only the completed tasks from the `tasks` table.
+
+## Database viewer screenshot
+
+Add a screenshot here after opening `tasks.db` in DB Browser for SQLite.
+
+## API
+
+- `GET /tasks`
+- `GET /tasks/{id}`
+- `POST /tasks`
+- `PUT /tasks/{id}`
+- `DELETE /tasks/{id}`
