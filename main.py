@@ -1,57 +1,20 @@
-from pathlib import Path
-import sqlite3
-
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
+
+from storage import TaskRepository
 
 
 app = FastAPI()
-
-DATABASE_PATH = Path(__file__).with_name("tasks.db")
-
-
-def get_db_connection():
-    connection = sqlite3.connect(DATABASE_PATH)
-    connection.row_factory = sqlite3.Row
-    return connection
+repository = TaskRepository()
 
 
-def task_to_dict(task_row):
-    return {
-        "id": task_row["id"],
-        "title": task_row["title"],
-        "done": bool(task_row["done"]),
-    }
-
-
+@app.on_event("startup")
 def initialize_database():
-    with get_db_connection() as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tasks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                done INTEGER NOT NULL DEFAULT 0
-            )
-            """
-        )
-
-        task_count = connection.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
-
-        if task_count == 0:
-            connection.executemany(
-                "INSERT INTO tasks (title, done) VALUES (?, ?)",
-                [
-                    ("Learn FastAPI", 0),
-                    ("Build API", 0),
-                    ("Upload Github", 1),
-                ],
-            )
-
-
-initialize_database()
+    repository.initialize()
 
 
 @app.exception_handler(HTTPException)
@@ -64,114 +27,75 @@ def handle_http_exception(_, exc):
     return JSONResponse(status_code=exc.status_code, content=content)
 
 
+@app.exception_handler(RequestValidationError)
+def handle_validation_error(_, __):
+    return JSONResponse(status_code=400, content={"error": "Invalid request body"})
+
+
 class TaskCreate(BaseModel):
-    title:str
+    title: str
+
+
 class TaskUpdate(BaseModel):
-    title:str
-    done:bool
-    
+    title: str
+    done: bool
+
+
 @app.get("/")
 def home():
     return {
         "name": "Task API",
         "version": "1.0",
-        "endpoints": [
-            "/tasks"
-        ]
+        "endpoints": ["/tasks"],
     }
+
 
 @app.get("/health")
 def health():
-    return {
-        "status":"ok"
-    }
-    
+    return {"status": "ok"}
+
+
 @app.get("/tasks")
 def get_tasks():
-    with get_db_connection() as connection:
-        rows = connection.execute(
-            "SELECT id, title, done FROM tasks ORDER BY id"
-        ).fetchall()
-
-    return [task_to_dict(row) for row in rows]
+    return repository.list_tasks()
 
 
 @app.get("/tasks/{id}")
-def get_task(id:int):
-    with get_db_connection() as connection:
-        row = connection.execute(
-            "SELECT id, title, done FROM tasks WHERE id = ?",
-            (id,),
-        ).fetchone()
+def get_task(id: int):
+    task = repository.get_task(id)
 
-    if row is not None:
-        return task_to_dict(row)
+    if task is not None:
+        return task
 
-    raise HTTPException(
-        status_code=404,
-        detail={"error": "Task not found"}
-    )
-    
-    
-@app.post("/tasks",status_code=201)
-def create_task(task:TaskCreate):
+    raise HTTPException(status_code=404, detail={"error": "Task not found"})
 
+
+@app.post("/tasks", status_code=201)
+def create_task(task: TaskCreate):
     if not task.title.strip():
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Title cannot be empty"}
-        )
+        raise HTTPException(status_code=400, detail={"error": "Title cannot be empty"})
 
-    with get_db_connection() as connection:
-        cursor = connection.execute(
-            "INSERT INTO tasks (title, done) VALUES (?, ?)",
-            (task.title, 0),
-        )
-        created_task = connection.execute(
-            "SELECT id, title, done FROM tasks WHERE id = ?",
-            (cursor.lastrowid,),
-        ).fetchone()
+    return repository.create_task(task.title)
 
-    return task_to_dict(created_task)
 
 @app.put("/tasks/{id}")
-def update_task(id:int,data:TaskUpdate):
-
+def update_task(id: int, data: TaskUpdate):
     if not data.title.strip():
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Title cannot be empty"}
-        )
+        raise HTTPException(status_code=400, detail={"error": "Title cannot be empty"})
 
-    with get_db_connection() as connection:
-        cursor = connection.execute(
-            "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
-            (data.title, int(data.done), id),
-        )
+    updated_task = repository.update_task(id, data.title, data.done)
 
-        if cursor.rowcount == 0:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "Task not found"}
-            )
+    if updated_task is not None:
+        return updated_task
 
-        updated_task = connection.execute(
-            "SELECT id, title, done FROM tasks WHERE id = ?",
-            (id,),
-        ).fetchone()
+    raise HTTPException(status_code=404, detail={"error": "Task not found"})
 
-    return task_to_dict(updated_task)
-    
-@app.delete("/tasks/{id}",status_code=204)
-def delete_task(id:int):
-    with get_db_connection() as connection:
-        cursor = connection.execute(
-            "DELETE FROM tasks WHERE id = ?",
-            (id,),
-        )
 
-    if cursor.rowcount == 0:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "Task not found"}
-        )
+@app.delete("/tasks/{id}", status_code=204)
+def delete_task(id: int):
+    deleted = repository.delete_task(id)
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail={"error": "Task not found"})
+
+    return Response(status_code=204)
