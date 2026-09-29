@@ -72,6 +72,21 @@ To prove provider fallback manually, point `GEO_PROVIDER_A_URL` and `GEO_PROVIDE
 
 ## Authentication and tenancy
 
+The project now supports two separate authentication concerns:
+
+- Supabase Auth handles end-user signup, login, refresh, verified JWT access, and logout.
+- Tenant API keys continue to protect owner widget-management and analytics routes.
+
+Supabase Auth uses the existing environment names from `.env.example`: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The publishable key is sent only to Supabase Auth; the database connection string remains server-side. Swagger UI at `/docs` exposes a Bearer JWT authorization scheme and lock icons on protected routes.
+
+End-user flow:
+
+```text
+POST /auth/signup -> POST /auth/login -> copy access_token
+-> Swagger Authorize: Bearer <access_token>
+-> GET /protected/profile -> POST /auth/logout
+```
+
 Owner endpoints require either:
 
 ```http
@@ -85,6 +100,13 @@ or `Authorization: Bearer demo-tenant-a-key`. Only SHA-256 hashes are stored. Ev
 | Method | Path | Auth | Purpose |
 |---|---|---:|---|
 | GET | `/health` | No | Health probe |
+| GET | `/public/info` | No | Public authentication example |
+| POST | `/auth/signup` | No | Create a Supabase Auth user |
+| POST | `/auth/login` | No | Return access and refresh tokens |
+| POST | `/auth/refresh` | Refresh token | Rotate an expired access token |
+| POST | `/auth/logout` | Bearer JWT | End the Supabase Auth session |
+| GET | `/protected/profile` | Bearer JWT | Return safe verified user metadata |
+| GET | `/protected/dashboard` | Bearer JWT | Prove reusable route protection |
 | POST | `/api/widgets` | Yes | Create validated widget |
 | GET | `/api/widgets` | Yes | List the tenant's widgets |
 | GET | `/api/widgets/{id}` | Yes | Read one tenant widget |
@@ -140,3 +162,15 @@ The product makes no AI calls, so runtime AI cost is $0. `AI_MONTHLY_BUDGET_USD`
 - The backend uses Supabase as managed Postgres rather than exposing the Supabase Data API. This preserves transactions, `FOR UPDATE SKIP LOCKED`, and existing SQL indexes while keeping database credentials server-side.
 
 See `DESIGN.md` for the design contract, `EVIDENCE.md` for requirement-by-requirement proof, and `BUILDLOG.md` for the AI assistance record.
+
+## Polite scraper module
+
+The isolated `scraper/` module implements the Books to Scrape assignment without mixing crawler concerns into the API. It processes exactly three catalogue pages, discovers 60 unique detail URLs, uses a named user-agent, a timeout, a minimum 500 ms delay, status checks, cache-first development, bounded retries, Pydantic validation, canonical-URL deduplication, per-page failure isolation, and an honest run report.
+
+```bash
+python -m scraper.src.main
+python -m scraper.src.main --inject-broken-url
+pytest -q scraper/tests
+```
+
+See `scraper/README.md` for target classification, ethics, schema, outputs, and limitations. Cached HTML is ignored by Git; validated JSON evidence remains under `scraper/output/`.

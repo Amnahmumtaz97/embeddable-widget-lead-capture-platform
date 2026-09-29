@@ -63,6 +63,15 @@ class SubmissionCreate(BaseModel):
     website: str = Field(default="", max_length=500)
 
 
+class AuthCredentials(BaseModel):
+    email: str | None = None
+    password: str | None = None
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str | None = None
+
+
 class GeoResult(BaseModel):
     country: str | None = None
     country_code: str | None = None

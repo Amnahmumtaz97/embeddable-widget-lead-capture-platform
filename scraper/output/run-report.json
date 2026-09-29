@@ -1,0 +1,17 @@
+{
+  "started_at": "2026-09-29T16:38:33.155894Z",
+  "duration_seconds": 5.078,
+  "target": "Books to Scrape practice sandbox",
+  "catalogue_pages": 3,
+  "discovered": 61,
+  "unique_urls": 61,
+  "pages_fetched": 0,
+  "cache_hits": 63,
+  "valid_records": 60,
+  "invalid_records": 1,
+  "failed_pages": 1,
+  "failed_page_urls": [
+    "https://books.toscrape.com/catalogue/this-book-does-not-exist/index.html"
+  ],
+  "robots_status": "no robots file found"
+}

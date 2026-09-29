@@ -19,6 +19,35 @@ class FakeGeo:
         return {"country": "Pakistan", "country_code": "PK", "city": "Karachi", "provider": "provider_b"}
 
 
+class FakeAuth:
+    def __init__(self):
+        self.logged_out = []
+
+    def signup(self, email, password):
+        return {"user": {"id": "user-1", "email": email, "created_at": "2026-09-29T00:00:00Z"}}
+
+    def login(self, email, password):
+        if password != "password123":
+            from app.services.auth import AuthProviderError
+            raise AuthProviderError("bad login", 400)
+        return {"access_token": "valid-jwt", "refresh_token": "refresh-jwt", "token_type": "bearer", "expires_in": 3600, "user": {"id": "user-1", "email": email}}
+
+    def refresh(self, refresh_token):
+        if refresh_token != "refresh-jwt":
+            from app.services.auth import AuthProviderError
+            raise AuthProviderError("bad refresh", 400)
+        return {"access_token": "new-jwt", "refresh_token": "new-refresh", "token_type": "bearer"}
+
+    def verify(self, token):
+        if token not in {"valid-jwt", "new-jwt"}:
+            from app.services.auth import AuthProviderError
+            raise AuthProviderError("bad token", 401)
+        return {"id": "user-1", "email": "test@example.com", "created_at": "2026-09-29T00:00:00Z"}
+
+    def logout(self, token):
+        self.logged_out.append(token)
+
+
 class MemoryRepository:
     def __init__(self):
         self.tenants = {"key-a": {"id": TENANT_A, "name": "Tenant A"}, "key-b": {"id": TENANT_B, "name": "Tenant B"}}
@@ -113,11 +142,11 @@ WIDGET_PAYLOAD = {"type": "contact", "title": "Talk to us", "description": "We r
 @pytest.fixture
 def app_factory():
     clients = []
-    def make(*, ip_limit=20, widget_limit=100, max_payload=16384, geo=None):
+    def make(*, ip_limit=20, widget_limit=100, max_payload=16384, geo=None, auth=None):
         repo = MemoryRepository()
         settings = Settings(public_base_url="http://testserver", worker_enabled=False, trust_proxy_headers=True, rate_limit_ip=ip_limit, rate_limit_widget=widget_limit, max_payload_bytes=max_payload)
         limiter = SlidingWindowRateLimiter(ip_limit, widget_limit, 60)
-        app = create_app(settings=settings, repository=repo, geo_enricher=geo or FakeGeo(), rate_limiter=limiter, start_worker=False)
+        app = create_app(settings=settings, repository=repo, geo_enricher=geo or FakeGeo(), rate_limiter=limiter, auth_service=auth or FakeAuth(), start_worker=False)
         client = TestClient(app)
         client.__enter__()
         clients.append(client)

@@ -8,10 +8,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import Settings, get_settings
-from app.models import SubmissionCreate, WidgetCreate, WidgetUpdate
+from app.models import AuthCredentials, RefreshTokenRequest, SubmissionCreate, WidgetCreate, WidgetUpdate
 from app.repositories import SupabaseRepository, jsonable_row
+from app.services.auth import AuthConfigurationError, AuthProviderError, SupabaseAuthService
 from app.services.geo import GeoEnricher
 from app.services.jobs import ConsoleNotifier, JobWorker
 from app.services.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
@@ -76,11 +78,24 @@ def _dump_widget(widget: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def create_app(*, settings: Settings | None = None, repository=None, geo_enricher=None, rate_limiter=None, start_worker: bool | None = None) -> FastAPI:
+def create_app(
+    *,
+    settings: Settings | None = None,
+    repository=None,
+    geo_enricher=None,
+    rate_limiter=None,
+    auth_service=None,
+    start_worker: bool | None = None,
+) -> FastAPI:
     settings = settings or get_settings()
     repository = repository or SupabaseRepository(settings.database_url)
     geo_enricher = geo_enricher or GeoEnricher(settings)
     rate_limiter = rate_limiter or SlidingWindowRateLimiter(settings.rate_limit_ip, settings.rate_limit_widget, settings.rate_limit_window_seconds)
+    auth_service = auth_service or SupabaseAuthService(
+        settings.supabase_url,
+        settings.supabase_publishable_key,
+        timeout_seconds=settings.auth_timeout_seconds,
+    )
     worker = JobWorker(repository, ConsoleNotifier(settings.notification_force_failure), settings)
     should_start_worker = settings.worker_enabled if start_worker is None else start_worker
 
@@ -96,6 +111,7 @@ def create_app(*, settings: Settings | None = None, repository=None, geo_enriche
     app = FastAPI(title="Embeddable Widget & Lead-Capture Platform", version="1.0.0", lifespan=lifespan)
     app.state.repository = repository
     app.state.worker = worker
+    app.state.auth_service = auth_service
     app.add_middleware(PayloadSizeMiddleware, max_bytes=settings.max_payload_bytes)
     app.add_middleware(CORSMiddleware, allow_origins=settings.allowed_origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "X-API-Key", "Idempotency-Key", "Authorization"], expose_headers=["X-Idempotent-Replay", "Retry-After"], max_age=600)
 
@@ -119,6 +135,29 @@ def create_app(*, settings: Settings | None = None, repository=None, geo_enriche
             raise HTTPException(401, detail={"error": "Invalid API key"})
         return tenant
 
+    bearer = HTTPBearer(
+        auto_error=False,
+        bearerFormat="JWT",
+        description="Supabase Auth access token returned by POST /auth/login",
+    )
+
+    def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict[str, Any]:
+        if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials.strip():
+            raise HTTPException(401, detail={"error": "Access token required"})
+        try:
+            return auth_service.verify(credentials.credentials)
+        except AuthConfigurationError as exc:
+            raise HTTPException(503, detail={"error": str(exc)}) from exc
+        except AuthProviderError as exc:
+            raise HTTPException(401, detail={"error": "Invalid or expired token"}) from exc
+
+    def require_auth_fields(payload: AuthCredentials) -> tuple[str, str]:
+        email = (payload.email or "").strip()
+        password = payload.password or ""
+        if not email or not password:
+            raise HTTPException(400, detail={"error": "Email and password are required"})
+        return email, password
+
     @app.get("/")
     def home():
         return {"name": "Embeddable Widget & Lead-Capture Platform", "version": "1.0.0", "docs": "/docs", "health": "/health"}
@@ -126,6 +165,77 @@ def create_app(*, settings: Settings | None = None, repository=None, geo_enriche
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/public/info", tags=["Authentication"])
+    def public_info():
+        return {"message": "Welcome stranger! This info is public."}
+
+    @app.post("/auth/signup", status_code=201, tags=["Authentication"])
+    def signup(payload: AuthCredentials):
+        email, password = require_auth_fields(payload)
+        try:
+            result = auth_service.signup(email, password)
+        except AuthConfigurationError as exc:
+            raise HTTPException(503, detail={"error": str(exc)}) from exc
+        except AuthProviderError as exc:
+            raise HTTPException(400, detail={"error": str(exc)}) from exc
+        user = result.get("user") or result
+        return {"user": user}
+
+    @app.post("/auth/login", tags=["Authentication"])
+    def login(payload: AuthCredentials):
+        email, password = require_auth_fields(payload)
+        try:
+            result = auth_service.login(email, password)
+        except AuthConfigurationError as exc:
+            raise HTTPException(503, detail={"error": str(exc)}) from exc
+        except AuthProviderError as exc:
+            raise HTTPException(401, detail={"error": "Invalid login credentials"}) from exc
+        return {
+            "access_token": result.get("access_token"),
+            "refresh_token": result.get("refresh_token"),
+            "token_type": result.get("token_type", "bearer"),
+            "expires_in": result.get("expires_in"),
+            "user": result.get("user"),
+        }
+
+    @app.post("/auth/refresh", tags=["Authentication"])
+    def refresh(payload: RefreshTokenRequest):
+        refresh_token = (payload.refresh_token or "").strip()
+        if not refresh_token:
+            raise HTTPException(400, detail={"error": "Refresh token is required"})
+        try:
+            result = auth_service.refresh(refresh_token)
+        except AuthConfigurationError as exc:
+            raise HTTPException(503, detail={"error": str(exc)}) from exc
+        except AuthProviderError as exc:
+            raise HTTPException(401, detail={"error": "Invalid or expired refresh token"}) from exc
+        return result
+
+    @app.get("/protected/profile", tags=["Authentication"])
+    def protected_profile(user=Depends(current_user)):
+        return {
+            "id": user.get("id"),
+            "email": user.get("email"),
+            "created_at": user.get("created_at"),
+        }
+
+    @app.get("/protected/dashboard", tags=["Authentication"])
+    def protected_dashboard(user=Depends(current_user)):
+        return {"message": "Protected dashboard", "user_id": user.get("id")}
+
+    @app.post("/auth/logout", status_code=204, tags=["Authentication"])
+    def logout(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        _user=Depends(current_user),
+    ):
+        try:
+            auth_service.logout(credentials.credentials)
+        except AuthConfigurationError as exc:
+            raise HTTPException(503, detail={"error": str(exc)}) from exc
+        except AuthProviderError as exc:
+            raise HTTPException(502, detail={"error": "Logout failed"}) from exc
+        return Response(status_code=204)
 
     @app.post("/api/widgets", status_code=201)
     def create_widget(payload: WidgetCreate, tenant=Depends(current_tenant)):
