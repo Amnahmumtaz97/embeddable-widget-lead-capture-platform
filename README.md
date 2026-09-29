@@ -36,7 +36,7 @@ Requirements: a free Supabase project and Docker with Compose. The API connects 
 
 1. Create a Supabase project.
 2. In its dashboard, select **Connect**, choose **Session pooler**, and copy the connection string. Session mode uses port `5432` and works from IPv4-only networks.
-3. Copy the environment template and replace `SUPABASE_DATABASE_URL` with that string. If this repository already has a `.env` from the old local database, replace its `POSTGRES_*` / `DATABASE_URL` entries with `SUPABASE_DATABASE_URL`. Percent-encode reserved password characters and retain `sslmode=require`.
+3. Copy the environment template and replace `URL_ENCODED_PASSWORD` in `SUPABASE_DATABASE_URL` with the project's database password. If this repository already has a `.env` from the old local database, replace its `POSTGRES_*` / `DATABASE_URL` entries with `SUPABASE_DATABASE_URL`. Percent-encode reserved password characters and retain `sslmode=require`.
 
 ```bash
 cp .env.example .env

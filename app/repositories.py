@@ -30,6 +30,16 @@ class SupabaseRepository:
                 "SUPABASE_DATABASE_URL is required. Copy .env.example to .env and paste "
                 "the Session pooler URL from the Supabase Connect dialog."
             )
+        if self.database_url.startswith(("http://", "https://")):
+            raise RuntimeError(
+                "SUPABASE_DATABASE_URL must be a postgresql:// Session pooler connection string, "
+                "not NEXT_PUBLIC_SUPABASE_URL. In Supabase, open Connect -> Session pooler and "
+                "copy the URI shown there."
+            )
+        if not self.database_url.startswith(("postgresql://", "postgres://")):
+            raise RuntimeError(
+                "SUPABASE_DATABASE_URL must start with postgresql:// or postgres://."
+            )
         return psycopg.connect(self.database_url, row_factory=dict_row, sslmode="require")
 
     def migrate(self) -> None:

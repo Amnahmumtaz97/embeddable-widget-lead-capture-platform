@@ -39,6 +39,10 @@ def test_supabase_configuration_prefers_explicit_supabase_url(monkeypatch):
 def test_supabase_repository_requires_configuration_and_tls(monkeypatch):
     with pytest.raises(RuntimeError, match="SUPABASE_DATABASE_URL is required"):
         SupabaseRepository("").connect()
+    with pytest.raises(RuntimeError, match="not NEXT_PUBLIC_SUPABASE_URL"):
+        SupabaseRepository("https://project.supabase.co").connect()
+    with pytest.raises(RuntimeError, match="must start with postgresql"):
+        SupabaseRepository("pooler.supabase.com").connect()
     captured = {}
     marker = object()
     def fake_connect(url, **kwargs):
