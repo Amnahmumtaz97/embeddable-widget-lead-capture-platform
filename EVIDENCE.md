@@ -4,7 +4,7 @@ All proofs are deterministic and run without paid services. The command used was
 
 ```text
 > .\.venv\Scripts\python.exe -m pytest -v --disable-warnings
-collected 7 items
+collected 9 items
 tests/test_acceptance.py::test_authenticated_crud_and_tenant_isolation PASSED
 tests/test_acceptance.py::test_versioned_delivery_cache_snippet_and_cors_preflight PASSED
 tests/test_acceptance.py::test_submission_validation_spam_geo_idempotency_and_dashboard PASSED
@@ -12,7 +12,9 @@ tests/test_acceptance.py::test_malformed_oversized_and_rate_limited_requests_are
 tests/test_acceptance.py::test_invalid_widget_payload_is_rejected PASSED
 tests/test_resilience.py::test_geo_provider_fallback_and_total_failure PASSED
 tests/test_resilience.py::test_notification_failure_retries_without_losing_submission PASSED
-7 passed, 1 warning in 0.38s
+tests/test_resilience.py::test_supabase_configuration_prefers_explicit_supabase_url PASSED
+tests/test_resilience.py::test_supabase_repository_requires_configuration_and_tls PASSED
+9 passed, 1 warning in 0.36s
 ```
 
 The warning is Starlette's notice that its `TestClient` compatibility import will move to `httpx2`; it does not affect application behavior.
@@ -85,8 +87,8 @@ The warning is Starlette's notice that its `TestClient` compatibility import wil
 - [x] At least one retrying background job with failure alert.
   Proof: `test_notification_failure_retries_without_losing_submission PASSED`; `JobWorker` claims durable jobs, applies exponential retry state, and logs `ALERT side_effect_job_exhausted` after the final attempt.
 
-- [x] Real persistence with migrations, indexes, and isolated tenants.
-  Proof: `migrations/001_initial.sql` creates PostgreSQL tables plus tenant/widget/time/ready-job indexes; `PostgresRepository.create_submission_with_job` writes the lead and outbox job in one database transaction. Every owner query filters `tenant_id`.
+- [x] Real persistence with Supabase migrations, indexes, and isolated tenants.
+  Proof: `supabase/migrations/20260929000000_initial.sql` creates Supabase Postgres tables plus tenant/widget/time/ready-job indexes; `SupabaseRepository.create_submission_with_job` writes the lead and outbox job in one database transaction. Every owner query filters `tenant_id`. `test_supabase_repository_requires_configuration_and_tls PASSED` proves missing configuration fails closed and connections require TLS.
 
 - [x] Idempotency where retries matter.
   Proof: `test_submission_validation_spam_geo_idempotency_and_dashboard PASSED` repeats the same `Idempotency-Key`, receives `X-Idempotent-Replay: true`, and verifies exactly one submission. PostgreSQL also enforces a partial unique index.

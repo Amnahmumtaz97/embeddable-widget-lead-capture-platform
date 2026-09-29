@@ -17,7 +17,7 @@ The explicit non-goal is a general-purpose visual form builder or production CDN
 ## Request paths and layers
 
 ```text
-Owner + API key -> HTTP routes -> widget/dashboard services -> tenant-scoped repository -> PostgreSQL
+Owner + API key -> HTTP routes -> widget/dashboard services -> tenant-scoped repository -> Supabase database
 Customer page -> versioned widget.v1.js -> cached public config -> Shadow DOM form
 Visitor -> CORS/preflight -> size + schema validation -> rate/spam controls
         -> geo A -> geo B -> store lead + outbox job atomically -> success

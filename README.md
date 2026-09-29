@@ -1,13 +1,13 @@
 # Embeddable Widget & Lead-Capture Platform
 
-A multi-tenant FastAPI/PostgreSQL platform that lets an owner define a lead widget and embed it on any website with one versioned `<script>` tag. Public submissions are size-bounded, schema-validated, CORS-enabled, rate-limited, spam-filtered, geo-enriched through a fallback chain, stored idempotently, and followed by a retryable background notification. Owners get tenant-isolated CRUD, lead listings, and aggregate statistics.
+A multi-tenant FastAPI/Supabase platform that lets an owner define a lead widget and embed it on any website with one versioned `<script>` tag. Public submissions are size-bounded, schema-validated, CORS-enabled, rate-limited, spam-filtered, geo-enriched through a fallback chain, stored idempotently, and followed by a retryable background notification. Owners get tenant-isolated CRUD, lead listings, and aggregate statistics.
 
 ## Architecture
 
 ```text
 Widget owner (authenticated API key)
-  -> /api/widgets CRUD -----------------------> PostgreSQL widgets (tenant scoped)
-  -> /api/submissions + /api/dashboard/stats -> PostgreSQL leads + aggregates
+  -> /api/widgets CRUD -----------------------> Supabase widgets (tenant scoped)
+  -> /api/submissions + /api/dashboard/stats -> Supabase leads + aggregates
 
 Customer site :5500
   -> cached /assets/widget.v1.js?id=...
@@ -28,18 +28,27 @@ Background worker
   -> exponential retries -> terminal ALERT log
 ```
 
-The code is layered: HTTP contracts and middleware are in `app/api.py`, business rules are in `app/services/`, persistence and tenant-scoped SQL are in `app/repositories.py`, and schema history is in `migrations/`.
+The code is layered: HTTP contracts and middleware are in `app/api.py`, business rules are in `app/services/`, persistence and tenant-scoped SQL are in `app/repositories.py`, and schema history is in `supabase/migrations/`.
 
 ## Run and seed
 
-Requirements: Docker with Compose. No paid account, API key, or credit card is needed.
+Requirements: a free Supabase project and Docker with Compose. The API connects directly to Supabase's managed Postgres database; the browser never receives the database password or a service-role key.
+
+1. Create a Supabase project.
+2. In its dashboard, select **Connect**, choose **Session pooler**, and copy the connection string. Session mode uses port `5432` and works from IPv4-only networks.
+3. Copy the environment template and replace `SUPABASE_DATABASE_URL` with that string. If this repository already has a `.env` from the old local database, replace its `POSTGRES_*` / `DATABASE_URL` entries with `SUPABASE_DATABASE_URL`. Percent-encode reserved password characters and retain `sslmode=require`.
 
 ```bash
 cp .env.example .env
+```
+
+4. Start the API and second-origin demo. The API applies `supabase/migrations/20260929000000_initial.sql` automatically over a TLS-required connection.
+
+```bash
 docker compose up --build
 ```
 
-In another terminal, seed two demo tenants and the widget used by the test page:
+5. In another terminal, seed two demo tenants and the widget used by the test page:
 
 ```bash
 docker compose exec app python seed.py
@@ -51,7 +60,7 @@ Then open:
 - second-origin widget demo: `http://localhost:5500`
 - simple owner dashboard: `http://localhost:5500/dashboard.html`
 
-The committed placeholder demo key is `demo-tenant-a-key` only when `.env` is absent. If you copied `.env.example`, use the `DEMO_TENANT_A_API_KEY` value you set there. Use long random keys outside local demonstration.
+The local demo key is `demo-tenant-a-key`. Change `DEMO_TENANT_A_API_KEY` and `DEMO_TENANT_B_API_KEY` to long random values outside local demonstration, then enter the chosen tenant-A key on the dashboard page.
 
 Run the deterministic acceptance suite:
 
@@ -117,7 +126,7 @@ The versioned JavaScript bundle sends `Cache-Control: public, max-age=31536000, 
 
 ## Persistence, jobs, idempotency, and cost
 
-Versioned SQL migrations create indexed PostgreSQL tables. A submission and its notification job are committed atomically. The worker uses `FOR UPDATE SKIP LOCKED`, exponential retry scheduling, and a terminal alert. A partial unique index on `(widget_id, idempotency_key)` guarantees a retried lead is stored once, even under concurrent requests.
+Versioned SQL migrations create indexed tables in Supabase's managed Postgres database. A submission and its notification job are committed atomically. The worker uses `FOR UPDATE SKIP LOCKED`, exponential retry scheduling, and a terminal alert. A partial unique index on `(widget_id, idempotency_key)` guarantees a retried lead is stored once, even under concurrent requests.
 
 The product makes no AI calls, so runtime AI cost is $0. `AI_MONTHLY_BUDGET_USD` defaults to `0`, and an `ai_usage` table is ready for per-call attribution before any future AI feature is enabled.
 
@@ -128,5 +137,6 @@ The product makes no AI calls, so runtime AI cost is $0. `AI_MONTHLY_BUDGET_USD`
 - Geo services are external best-effort dependencies. Private/test IPs often produce no geo, which is an accepted degraded result.
 - CORS defaults to `*` for embeddability. Restrict `ALLOWED_ORIGINS` for a product with an owner-configured allowlist.
 - The demo dashboard intentionally stores its API key only in the current page DOM; it is proof, not a production frontend.
+- The backend uses Supabase as managed Postgres rather than exposing the Supabase Data API. This preserves transactions, `FOR UPDATE SKIP LOCKED`, and existing SQL indexes while keeping database credentials server-side.
 
 See `DESIGN.md` for the design contract, `EVIDENCE.md` for requirement-by-requirement proof, and `BUILDLOG.md` for the AI assistance record.

@@ -1,9 +1,9 @@
 import os
 from app.config import get_settings
-from app.repositories import PostgresRepository
+from app.repositories import SupabaseRepository
 
 def main() -> None:
-    repository = PostgresRepository(get_settings().database_url)
+    repository = SupabaseRepository(get_settings().database_url)
     repository.migrate()
     repository.seed_demo(os.getenv("DEMO_TENANT_A_API_KEY", "demo-tenant-a-key"), os.getenv("DEMO_TENANT_B_API_KEY", "demo-tenant-b-key"))
     print("Seeded Demo Tenant A and Demo Tenant B.")

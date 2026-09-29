@@ -1,1 +1,1 @@
--- The application applies versioned schema files from migrations/ at startup.
+-- The application applies versioned schema files from supabase/migrations/ at startup.

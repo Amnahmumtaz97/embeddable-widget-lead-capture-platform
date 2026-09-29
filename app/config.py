@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class Settings(BaseModel):
-    database_url: str = "postgresql://widget_user:widget_password@db:5432/widget_platform"
+    database_url: str = ""
     public_base_url: str = "http://localhost:8000"
     allowed_origins: list[str] = Field(default_factory=lambda: ["*"])
     max_payload_bytes: int = 16_384
@@ -27,7 +27,7 @@ class Settings(BaseModel):
     def from_env(cls) -> "Settings":
         origins = os.getenv("ALLOWED_ORIGINS", "*")
         return cls(
-            database_url=os.getenv("DATABASE_URL", cls.model_fields["database_url"].default),
+            database_url=os.getenv("SUPABASE_DATABASE_URL") or os.getenv("DATABASE_URL", ""),
             public_base_url=os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/"),
             allowed_origins=[item.strip() for item in origins.split(",") if item.strip()],
             max_payload_bytes=int(os.getenv("MAX_PAYLOAD_BYTES", "16384")),

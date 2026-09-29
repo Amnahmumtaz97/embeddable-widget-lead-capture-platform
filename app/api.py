@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.config import Settings, get_settings
 from app.models import SubmissionCreate, WidgetCreate, WidgetUpdate
-from app.repositories import PostgresRepository, jsonable_row
+from app.repositories import SupabaseRepository, jsonable_row
 from app.services.geo import GeoEnricher
 from app.services.jobs import ConsoleNotifier, JobWorker
 from app.services.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
@@ -78,7 +78,7 @@ def _dump_widget(widget: dict[str, Any]) -> dict[str, Any]:
 
 def create_app(*, settings: Settings | None = None, repository=None, geo_enricher=None, rate_limiter=None, start_worker: bool | None = None) -> FastAPI:
     settings = settings or get_settings()
-    repository = repository or PostgresRepository(settings.database_url)
+    repository = repository or SupabaseRepository(settings.database_url)
     geo_enricher = geo_enricher or GeoEnricher(settings)
     rate_limiter = rate_limiter or SlidingWindowRateLimiter(settings.rate_limit_ip, settings.rate_limit_widget, settings.rate_limit_window_seconds)
     worker = JobWorker(repository, ConsoleNotifier(settings.notification_force_failure), settings)

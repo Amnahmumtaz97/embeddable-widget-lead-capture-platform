@@ -13,19 +13,24 @@ from psycopg.types.json import Jsonb
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-MIGRATIONS_DIR = BASE_DIR / "migrations"
+MIGRATIONS_DIR = BASE_DIR / "supabase" / "migrations"
 
 
 def hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
-class PostgresRepository:
+class SupabaseRepository:
     def __init__(self, database_url: str):
         self.database_url = database_url
 
     def connect(self):
-        return psycopg.connect(self.database_url, row_factory=dict_row)
+        if not self.database_url:
+            raise RuntimeError(
+                "SUPABASE_DATABASE_URL is required. Copy .env.example to .env and paste "
+                "the Session pooler URL from the Supabase Connect dialog."
+            )
+        return psycopg.connect(self.database_url, row_factory=dict_row, sslmode="require")
 
     def migrate(self) -> None:
         with self.connect() as connection:
