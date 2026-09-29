@@ -10,6 +10,8 @@ The initial repository was a todo CRUD API, so the implementation was redesigned
 
 The local database container was replaced with a TLS-enforced Supabase connection. The schema moved to the standard `supabase/migrations/` layout, while the application continues to apply and track migrations at startup. The Docker stack now runs only the API and second-origin demo. No Supabase service-role or anon key is exposed because this backend connects directly with the database URL.
 
+The Windows Docker Desktop installation required an update from 4.86 to 4.93 and stale runtime-socket recovery. Docker's embedded DNS could not resolve the Supabase pooler, so the Compose services now use explicit public DNS resolvers. A live smoke test then confirmed cached config delivery, lead storage, tenant dashboard aggregation, and the second-origin page against Supabase.
+
 Corrections made during review included converting an existing UTF-16 requirements file before patching, avoiding trust of `X-Forwarded-For` unless explicitly configured, making validation errors JSON-safe, and adding date serialization for aggregation results. The test output pasted into `EVIDENCE.md` is produced after these corrections.
 
 There are no runtime AI calls in the product. The `ai_usage` schema and zero-dollar budget setting make cost attribution and a default-deny budget available if AI is added later; today runtime AI cost is exactly $0.

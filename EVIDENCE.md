@@ -109,3 +109,18 @@ exit 0
 > git diff --check
 exit 0 (line-ending conversion notices only)
 ```
+
+## Live Supabase smoke test
+
+Run on 2026-09-29 against the configured Supabase Session pooler after applying migrations and seeding demo data:
+
+```text
+ConfigStatus=200
+ConfigCache=public, max-age=60, stale-while-revalidate=300
+SubmissionAccepted=true
+SubmissionReplayed=false
+DashboardTotal=1
+DemoStatus=200
+```
+
+The smoke submission used the stable idempotency key `setup-smoke-20260929`, so rerunning the check cannot create duplicate leads.

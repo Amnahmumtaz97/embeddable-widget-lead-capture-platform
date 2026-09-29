@@ -1,6 +1,9 @@
 services:
   app:
     build: .
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       SUPABASE_DATABASE_URL: ${SUPABASE_DATABASE_URL:?Set SUPABASE_DATABASE_URL in .env}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
@@ -26,6 +29,9 @@ services:
 
   demo-site:
     image: python:3.12-alpine
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     working_dir: /site
     command: ["python", "-m", "http.server", "5500", "--bind", "0.0.0.0"]
     volumes:
