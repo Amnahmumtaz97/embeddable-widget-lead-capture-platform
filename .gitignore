@@ -1,6 +1,11 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
 .env
 tasks.db
 ai-version/tasks.db
+.pytest_cache/
+.coverage
+htmlcov/
+tmp/

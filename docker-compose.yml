@@ -2,16 +2,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-todo_api}
-      POSTGRES_USER: ${POSTGRES_USER:-todo_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-todo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-widget_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-widget_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-widget_password}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - widget_platform_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-todo_user} -d ${POSTGRES_DB:-todo_api}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-widget_user} -d ${POSTGRES_DB:-widget_platform}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,12 +18,39 @@ services:
   app:
     build: .
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://todo_user:todo_password@db:5432/todo_api}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://widget_user:widget_password@db:5432/widget_platform}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      MAX_PAYLOAD_BYTES: ${MAX_PAYLOAD_BYTES:-16384}
+      RATE_LIMIT_IP: ${RATE_LIMIT_IP:-20}
+      RATE_LIMIT_WIDGET: ${RATE_LIMIT_WIDGET:-100}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+      GEO_PROVIDER_A_URL: ${GEO_PROVIDER_A_URL:-http://ip-api.com/json/{ip}?fields=status,country,countryCode,city}
+      GEO_PROVIDER_B_URL: ${GEO_PROVIDER_B_URL:-https://ipapi.co/{ip}/json/}
+      GEO_PROVIDER_A_ENABLED: ${GEO_PROVIDER_A_ENABLED:-true}
+      GEO_PROVIDER_B_ENABLED: ${GEO_PROVIDER_B_ENABLED:-true}
+      GEO_TIMEOUT_SECONDS: ${GEO_TIMEOUT_SECONDS:-1.5}
+      WORKER_ENABLED: ${WORKER_ENABLED:-true}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-2}
+      NOTIFICATION_FORCE_FAILURE: ${NOTIFICATION_FORCE_FAILURE:-false}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      DEMO_TENANT_A_API_KEY: ${DEMO_TENANT_A_API_KEY:-demo-tenant-a-key}
+      DEMO_TENANT_B_API_KEY: ${DEMO_TENANT_B_API_KEY:-demo-tenant-b-key}
+      AI_MONTHLY_BUDGET_USD: ${AI_MONTHLY_BUDGET_USD:-0}
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
 
+  demo-site:
+    image: python:3.12-alpine
+    working_dir: /site
+    command: ["python", "-m", "http.server", "5500", "--bind", "0.0.0.0"]
+    volumes:
+      - ./test-site:/site:ro
+    ports:
+      - "5500:5500"
+
 volumes:
-  postgres_data:
+  widget_platform_data:

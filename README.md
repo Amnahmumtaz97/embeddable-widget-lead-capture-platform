@@ -1,38 +1,132 @@
-# Task API
+# Embeddable Widget & Lead-Capture Platform
 
-A simple CRUD to-do API built with **FastAPI** and **Postgres**.
+A multi-tenant FastAPI/PostgreSQL platform that lets an owner define a lead widget and embed it on any website with one versioned `<script>` tag. Public submissions are size-bounded, schema-validated, CORS-enabled, rate-limited, spam-filtered, geo-enriched through a fallback chain, stored idempotently, and followed by a retryable background notification. Owners get tenant-isolated CRUD, lead listings, and aggregate statistics.
 
-The routes stay the same, but the storage layer now uses a Postgres repository instead of the old in-memory approach. That is the only architectural swap: the API contract is unchanged.
+## Architecture
 
-## How to run the full stack
+```text
+Widget owner (authenticated API key)
+  -> /api/widgets CRUD -----------------------> PostgreSQL widgets (tenant scoped)
+  -> /api/submissions + /api/dashboard/stats -> PostgreSQL leads + aggregates
 
-1. Copy `.env.example` to `.env` and adjust the values if needed.
-2. Run `docker compose up --build`.
-3. Open the app at `http://localhost:8000`.
+Customer site :5500
+  -> cached /assets/widget.v1.js?id=...
+  -> cached /widgets/{id}/config
+  -> renders isolated form in Shadow DOM
 
-Postgres runs in Docker with a named volume, so the task data survives container restarts.
+Visitor (public, any origin)
+  -> OPTIONS /submissions (CORS preflight)
+  -> POST /submissions
+       payload bound -> Pydantic + dynamic form validation
+       -> IP/widget rate limit -> honeypot
+       -> geo provider A -> provider B -> no geo (all are valid outcomes)
+       -> one transaction: lead + durable notification job
+       -> 2xx immediately
 
-## What lives where
+Background worker
+  -> claims jobs safely -> console notification
+  -> exponential retries -> terminal ALERT log
+```
 
-- `main.py` keeps the FastAPI routes and validation.
-- `storage.py` contains the Postgres repository.
-- `db/init.sql` creates the `tasks` table.
-- `docker-compose.yml` starts the app and database together.
+The code is layered: HTTP contracts and middleware are in `app/api.py`, business rules are in `app/services/`, persistence and tenant-scoped SQL are in `app/repositories.py`, and schema history is in `migrations/`.
 
-## Persistence check
+## Run and seed
 
-To prove persistence, I created a task through `POST /tasks`, restarted the app container, and then called `GET /tasks` again. The new row was still present because the database state lives in the named Docker volume.
+Requirements: Docker with Compose. No paid account, API key, or credit card is needed.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+In another terminal, seed two demo tenants and the widget used by the test page:
+
+```bash
+docker compose exec app python seed.py
+```
+
+Then open:
+
+- API/OpenAPI: `http://localhost:8000/docs`
+- second-origin widget demo: `http://localhost:5500`
+- simple owner dashboard: `http://localhost:5500/dashboard.html`
+
+The committed placeholder demo key is `demo-tenant-a-key` only when `.env` is absent. If you copied `.env.example`, use the `DEMO_TENANT_A_API_KEY` value you set there. Use long random keys outside local demonstration.
+
+Run the deterministic acceptance suite:
+
+```bash
+docker compose exec app pytest -q
+```
+
+To prove provider fallback manually, point `GEO_PROVIDER_A_URL` and `GEO_PROVIDER_B_URL` at local mock endpoints. Toggle either provider with `GEO_PROVIDER_A_ENABLED` / `GEO_PROVIDER_B_ENABLED`. Set `NOTIFICATION_FORCE_FAILURE=true` to prove that a stored submission survives notification retries. Automated proofs use mock transports and require no network.
+
+## Authentication and tenancy
+
+Owner endpoints require either:
+
+```http
+X-API-Key: demo-tenant-a-key
+```
+
+or `Authorization: Bearer demo-tenant-a-key`. Only SHA-256 hashes are stored. Every owner repository query includes `tenant_id`; another tenant receives `404` instead of learning whether a resource exists.
 
 ## API
 
-- `GET /tasks`
-- `GET /tasks/{id}`
-- `POST /tasks`
-- `PUT /tasks/{id}`
-- `DELETE /tasks/{id}`
+| Method | Path | Auth | Purpose |
+|---|---|---:|---|
+| GET | `/health` | No | Health probe |
+| POST | `/api/widgets` | Yes | Create validated widget |
+| GET | `/api/widgets` | Yes | List the tenant's widgets |
+| GET | `/api/widgets/{id}` | Yes | Read one tenant widget |
+| PUT | `/api/widgets/{id}` | Yes | Replace one tenant widget |
+| DELETE | `/api/widgets/{id}` | Yes | Delete one tenant widget |
+| GET | `/api/widgets/{id}/snippet` | Yes | Generate the one-line embed |
+| GET | `/assets/widget.v1.js` | No | Long-cache immutable bundle |
+| GET | `/widgets/{id}/config` | No | Short-cache public config |
+| POST | `/submissions` | No | Hardened public lead capture |
+| GET | `/api/submissions` | Yes | Tenant-isolated lead table data |
+| GET | `/api/dashboard/stats` | Yes | Counts over time, by widget, and by country |
 
-## Notes
+Create a widget:
 
-- Validation errors return `400` with JSON error bodies.
-- Missing tasks return `404` with `{"error": "Task not found"}`.
-- The Postgres schema is created from `db/init.sql`, and the app seeds three starter tasks only when the table is empty.
+```bash
+curl -X POST http://localhost:8000/api/widgets \
+  -H "X-API-Key: demo-tenant-a-key" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"contact","title":"Talk to us","description":"We reply quickly.","fields":[{"name":"email","label":"Email","type":"email","required":true,"max_length":120}],"button_text":"Send","display_options":{"theme":"light"}}'
+```
+
+Submit a lead (replace the widget ID if you did not use the seed):
+
+```bash
+curl -i -X POST http://localhost:8000/submissions \
+  -H "Origin: http://localhost:5500" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: demo-lead-001" \
+  -d '{"widget_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","data":{"name":"Ada","email":"ada@example.com"},"website":""}'
+```
+
+All errors are JSON. Boundary failures use `401`, `404`, `413`, `422`, or `429` as appropriate. A filled `website` honeypot returns an intentionally non-revealing `202` and stores nothing. Reusing `Idempotency-Key` returns the original submission with `X-Idempotent-Replay: true`.
+
+## Caching, CORS, and proxy safety
+
+The versioned JavaScript bundle sends `Cache-Control: public, max-age=31536000, immutable`; changing the bundle requires a new filename such as `widget.v2.js`. Config sends `public, max-age=60, stale-while-revalidate=300`. CORS handles browser preflight and permits the headers used by the loader.
+
+`X-Forwarded-For` is ignored by default because clients can spoof it. Enable `TRUST_PROXY_HEADERS=true` only behind a trusted reverse proxy that overwrites that header.
+
+## Persistence, jobs, idempotency, and cost
+
+Versioned SQL migrations create indexed PostgreSQL tables. A submission and its notification job are committed atomically. The worker uses `FOR UPDATE SKIP LOCKED`, exponential retry scheduling, and a terminal alert. A partial unique index on `(widget_id, idempotency_key)` guarantees a retried lead is stored once, even under concurrent requests.
+
+The product makes no AI calls, so runtime AI cost is $0. `AI_MONTHLY_BUDGET_USD` defaults to `0`, and an `ai_usage` table is ready for per-call attribution before any future AI feature is enabled.
+
+## Limitations
+
+- Rate-limit state is in one application process. A multi-replica deployment should move counters to Redis or another shared store.
+- The included side effect logs a notification rather than sending real email; this keeps the project free and makes failure behavior deterministic.
+- Geo services are external best-effort dependencies. Private/test IPs often produce no geo, which is an accepted degraded result.
+- CORS defaults to `*` for embeddability. Restrict `ALLOWED_ORIGINS` for a product with an owner-configured allowlist.
+- The demo dashboard intentionally stores its API key only in the current page DOM; it is proof, not a production frontend.
+
+See `DESIGN.md` for the design contract, `EVIDENCE.md` for requirement-by-requirement proof, and `BUILDLOG.md` for the AI assistance record.

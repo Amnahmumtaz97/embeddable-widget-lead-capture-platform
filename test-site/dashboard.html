@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lead dashboard</title>
+  <style>body{max-width:960px;margin:40px auto;padding:0 20px;font:15px system-ui;color:#172033}input,button{padding:9px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{text-align:left;border-bottom:1px solid #dbe3ea;padding:9px}.stats{display:flex;gap:18px}.card{padding:16px;background:#eef7f3;border-radius:8px}</style>
+</head>
+<body>
+  <a href="/">Back to widget demo</a><h1>Owner dashboard</h1>
+  <p><input id="key" type="password" value="demo-tenant-a-key" aria-label="API key"><button id="load">Load leads</button></p>
+  <div id="stats" class="stats"></div>
+  <table><thead><tr><th>Received</th><th>Widget</th><th>Country</th><th>Data</th></tr></thead><tbody id="rows"></tbody></table>
+  <script>
+    document.getElementById("load").onclick = async function () {
+      const headers = {"X-API-Key": document.getElementById("key").value};
+      const [statsResponse, leadsResponse] = await Promise.all([fetch("http://localhost:8000/api/dashboard/stats", {headers}), fetch("http://localhost:8000/api/submissions", {headers})]);
+      if (!statsResponse.ok || !leadsResponse.ok) { alert("Check the API key and seed step."); return; }
+      const stats = await statsResponse.json(), leads = await leadsResponse.json();
+      document.getElementById("stats").innerHTML = `<div class="card"><strong>${stats.total}</strong><br>Total leads</div><div class="card"><strong>${stats.geo.length}</strong><br>Geo groups</div>`;
+      document.getElementById("rows").innerHTML = leads.map(lead => `<tr><td>${new Date(lead.created_at).toLocaleString()}</td><td>${lead.widget_title}</td><td>${lead.country || "Unknown"}</td><td><code>${JSON.stringify(lead.data)}</code></td></tr>`).join("");
+    };
+  </script>
+</body>
+</html>
